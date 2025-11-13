@@ -5,6 +5,8 @@ import axios from "axios";
 import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
+import FormData from "form-data";
+
 
 type CustomError = Error & {
   response?: { data?: unknown };
@@ -30,6 +32,39 @@ function withCors(res: NextResponse) {
   res.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
   return res;
+}
+
+async function callChatterboxTTS(text: string, audioPromptPath?: string) {
+  const form = new FormData();
+
+  form.append("text_input", text);
+  form.append("exaggeration_input", "0.5");
+  form.append("temperature_input", "0.8");
+  form.append("seed_num_input", "0");
+  form.append("cfgw_input", "0.5");
+  form.append("vad_trim_input", "false");
+
+  // optional voice prompt
+  if (audioPromptPath && fs.existsSync(audioPromptPath)) {
+    form.append(
+      "audio_prompt_path_input",
+      fs.createReadStream(audioPromptPath)
+    );
+  }
+
+  const res = await axios.post(
+    "https://api.replicate.com/v1/predictions", // or HF Space URL
+    form,
+    {
+      headers: {
+        ...form.getHeaders(),
+        Authorization: `Token ${process.env.RESEMBLE_API_KEY}`,
+      },
+      responseType: "arraybuffer", // <--- IMPORTANT
+    }
+  );
+
+  return Buffer.from(res.data); // return raw audio bytes
 }
 
 
@@ -203,9 +238,24 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     console.log("Response sent to client")
     console.log("Response:", llmResponse)
-    return withCors(NextResponse.json({
-      "response": llmResponse?.data?.response || "No response available"
-    }))
+
+    // 1. Extract text response from LLM
+    const reply = llmResponse?.data?.response || "No response available";
+
+    // 2. Convert to TTS
+    const audioBuffer = await callChatterboxTTS(reply, "Sample_Voice.mpeg");
+
+    // 3. Convert audio to base64 so frontend can play it easily
+    const base64Audio = audioBuffer.toString("base64");
+
+    // 4. Return both text + audio
+    return withCors(
+      NextResponse.json({
+        text: reply,
+        audioBase64: base64Audio,
+        audioMime: "audio/mpeg"
+      })
+    );
 
   } catch (error: unknown) {
     const e = error as CustomError;

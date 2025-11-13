@@ -16,6 +16,7 @@ type Message = {
   content: string; // text or video URL
   thumbnail?: string; // data URL for video thumbnail
   ts: number;
+  audioBase64?: string;
 };
 
 // --- Constants
@@ -90,14 +91,39 @@ function MessageBubble({
     >
       <div className={`max-w-[78%] ${isMe ? "text-right" : "text-left"}`}>
         {msg.type === "text" ? (
-          <div
-            className={`inline-block p-3 rounded-2xl break-words text-sm sm:text-base ${
-              isMe
-                ? "bg-indigo-600 text-white rounded-br-none"
-                : "bg-white/10 text-white rounded-bl-none"
-            }`}
-          >
-            {msg.content}
+          <div className="flex items-center gap-2">
+            <div
+              className={`inline-block p-3 rounded-2xl break-words text-sm sm:text-base ${
+                isMe
+                  ? "bg-indigo-600 text-white rounded-br-none"
+                  : "bg-white/10 text-white rounded-bl-none"
+              }`}
+            >
+              {msg.content}
+            </div>
+
+            {/* AUDIO ICON (AI only, when audio exists) */}
+            {msg.from === "ai" && msg.audioBase64 && (
+              <button
+                onClick={() => {
+                  const audio = new Audio(
+                    `data:audio/mpeg;base64,${msg.audioBase64}`
+                  );
+                  audio.play();
+                }}
+                className="p-2 bg-white/20 hover:bg-white/30 rounded-full"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  fill="white"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M9 8l-4 4 4 4V8zm3-4v16l8-8-8-8z" />
+                </svg>
+              </button>
+            )}
           </div>
         ) : (
           <div className="inline-block rounded-2xl overflow-hidden shadow-lg bg-black/30">
@@ -379,6 +405,7 @@ export default function DudeChat() {
           type: "text",
           content: aiText,
           ts: Date.now(),
+          audioBase64: resJson?.audioBase64 || undefined,
         });
       } catch (err: unknown) {
         console.error("Failed to upload recorded video:", err);
